@@ -2,30 +2,41 @@ use std::io::{self, Write};
 use tokio;
 use anyhow::Result;
 
-// Include your OllamaClient and related structs here
-mod rigatoni; // Assuming the client code is in `ollama_client.rs`
-use rigatoni::OllamaClient;
+mod rigatoni; 
+use rigatoni::{Message, OllamaClient};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut ai_model = OllamaClient::new();
     println!("Welcome to the AI CLI! Type your message and press Enter. Type 'exit' to quit.\n");
+    let mut preamble: Vec<Message> = Vec::<Message>::new();
+    ai_model.set_model("gemma2");
+
 
     loop {
         print!("You: ");
-        io::stdout().flush()?; // Ensure the prompt is displayed immediately
+        io::stdout().flush()?;
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-        let input = input.trim(); // Remove trailing newline or whitespace
+        let input = input.trim();
+        preamble.push(Message {
+            role: "user".to_string(),
+            content: input.to_string(),
+        });
 
         if input.eq_ignore_ascii_case("exit") {
             println!("Goodbye!");
             break;
         }
 
-        match ai_model.completion(input).await {
+        match ai_model.completion(preamble.clone()).await {
             Ok(response) => {
-                println!("AI: {}\n", response.message.unwrap().content);
+                let reply = response.message.unwrap().content;
+                println!("AI: {}\n", reply);
+                preamble.push(Message {
+                    role: "assistant".to_string(),
+                    content: reply.to_string(),
+                });
             }
             Err(err) => {
                 eprintln!("Error: {}\n", err);

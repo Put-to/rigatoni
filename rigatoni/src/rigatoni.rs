@@ -10,7 +10,6 @@ pub struct OllamaClient {
     base_url: String,
     model: String,
     http_client: HttpClient,
-    preamble: Vec::<Message>,
 }
 
 impl OllamaClient {
@@ -19,23 +18,23 @@ impl OllamaClient {
         Self {
             http_client: HttpClient::new(),
             base_url: "http://localhost:11434/".to_string(),
-            model: "gemma2".to_string(),
-            preamble: Vec::<Message>::new(),
+            model: "llama3.2".to_string(),
         }
     }
 
+    pub fn set_model(&mut self, model: &str){
+        self.model = model.to_string();
+    }
+
     /// Sends a completion request to the Ollama model.
-    pub async fn completion(&mut self,  prompt: &str) -> Result<OllamaResponse, CompletionError> {
+    pub async fn completion(&mut self,  preamble: Vec::<Message>) -> Result<OllamaResponse, CompletionError> {
         let url = format!("{}api/chat", self.base_url);
 
-        self.preamble.push(Message {
-            role: "user".to_string(),
-            content: prompt.to_string(),
-        });
+    
 
         let request_body = json!({
             "model": self.model,
-            "messages": self.preamble,
+            "messages": preamble,
             "stream": false
         });
     //    println!("Request body: {}", serde_json::to_string_pretty(&request_body).unwrap());
@@ -51,12 +50,7 @@ impl OllamaClient {
 
      //   print!("response: {:?}", response);
         // Extract the assistant's message
-        if let Some(message) = response.message.clone() {
-            self.preamble.push(Message {
-                role: "assistant".to_string(),
-                content: message.content.to_string(),
-            });
-        }
+    
 
        
      //   print!("preamble: {:?}", self.preamble);
