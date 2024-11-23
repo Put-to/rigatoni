@@ -10,7 +10,7 @@ async fn main() -> Result<()> {
     let mut ai_model = OllamaClient::new();
     println!("Welcome to the AI CLI! Type your message and press Enter. Type 'exit' to quit.\n");
     let mut preamble: Vec<Message> = Vec::<Message>::new();
-    ai_model.set_model("gemma2");
+    ai_model.set_model("llama3.1:8b");
 
 
     loop {
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
             break;
         }
 
-        match ai_model.completion(preamble.clone()).await {
+        match ai_model.chat(preamble.clone()).await {
             Ok(response) => {
                 let reply = response.message.unwrap().content;
                 println!("AI: {}\n", reply);
