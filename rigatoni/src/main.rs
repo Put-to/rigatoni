@@ -10,7 +10,8 @@ async fn main() -> Result<()> {
     let mut ai_model = OllamaClient::new();
     println!("Welcome to the AI CLI! Type your message and press Enter. Type 'exit' to quit.\n");
     let mut preamble: Vec<Message> = Vec::<Message>::new();
-    ai_model.set_model("llama3.1:8b");
+    
+    ai_model.set_model("twitch");
 
 
     loop {

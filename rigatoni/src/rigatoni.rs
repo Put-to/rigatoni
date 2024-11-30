@@ -3,7 +3,7 @@ use thiserror::Error;
 use anyhow::{Result, Error};
 use reqwest::Client as HttpClient;
 use serde_json::json;
-use std::{fs, path::{Path, PathBuf}, result};
+use std::{fs, io::{BufRead, Cursor}, path::{Path, PathBuf}, result};
 
 
 
@@ -59,7 +59,7 @@ impl OllamaClient {
         let parsed_modelfile = if let Some(file_path) = path {
             let real_path = PathBuf::from(file_path);
             if real_path.exists(){
-                let content = fs::read_to_string(&real_path);
+                let content = fs::read_to_string(&real_path)?;
                 self.parse_modelfile(&content, Some(real_path.parent().unwrap()))?
             }else{
                 return Err(Error::msg("Path does not exist"));
@@ -87,7 +87,47 @@ impl OllamaClient {
 
         
     fn parse_modelfile(&self, modelfile:&str, base: Option<&Path>)->Result<String>{
+        let base_path = base.unwrap_or_else(|| Path::new("."));
+        let mut output = String::new();
+        let reader = Cursor::new(modelfile);
+        for line in reader.lines(){
+            let line = line?;
+            let (command, args) = match line.split_once(' ') {
+                Some((cmd, args))=> (cmd.trim(), args.trim()), 
+                None => {
+                    output.push_str(&line);
+                    output.push('\n');
+                    continue;
+                }
+            };
 
+            match command.to_uppercase().as_str(){
+                "FROM" | "ADAPTER" => {
+                    let path = PathBuf::from(args).canonicalize()?;
+                    let resolved_path = if path.is_absolute(){
+                        path
+                    }else{
+                        base_path.join(path)
+                    };
+
+                    if resolved_path.exists(){
+                        let blob_ref = self.create_blob(&resolved_path)?;
+                        output.push_str(&format!("{} @{}\n", command, blob_ref));
+                    }else{
+                        return Err(Error::msg(format!("Path does not exist: {}", args)));
+                    }   
+                }
+                _=>{
+                    output.push_str(&line);
+                    output.push('\n');
+                }
+            }
+        }
+        Ok(output)
+    }
+
+    fn create_blob(&self, path: &Path) -> Result<String>{
+        Ok(format!("blob_ref_{}", path.display()))
     }
     }
 
