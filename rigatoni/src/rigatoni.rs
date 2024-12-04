@@ -12,6 +12,7 @@ pub struct OllamaClient {
     base_url: String,
     model: String,
     http_client: HttpClient,
+    tools: Vec<Tool>
 }
 
 impl OllamaClient {
@@ -20,11 +21,16 @@ impl OllamaClient {
             http_client: HttpClient::new(),
             base_url: "http://localhost:11434/".to_string(),
             model: "llama3.2".to_string(),
+            tools: vec![],
         }
     }
 
     pub fn set_model(&mut self, model: &str){
         self.model = model.to_string();
+    }
+
+    pub fn create_tool(&mut self, tool: Tool){
+        self.tools.push(tool);
     }
 
     pub async fn chat(&mut self,  preamble: Vec::<Message>) -> Result<OllamaResponse, CompletionError> {
@@ -33,7 +39,8 @@ impl OllamaClient {
         let request_body = json!({
             "model": self.model,
             "messages": preamble,
-            "stream": false
+            "stream": false,
+            "tools": self.tools
         });
 
         let response = self
@@ -44,6 +51,7 @@ impl OllamaClient {
             .await?
             .json::<OllamaResponse>()
             .await?;
+        println!("Response: {:?}", response);
 
         Ok(response)
     }
@@ -57,15 +65,15 @@ impl OllamaClient {
         stream: bool,
     ) -> Result<CreateResponse> {
         let parsed_modelfile = if let Some(file_path) = path {
-            let real_path = PathBuf::from(file_path);
+            let real_path = Path::new(file_path);
             if real_path.exists(){
                 let content = fs::read_to_string(&real_path)?;
-                self.parse_modelfile(&content, Some(real_path.parent().unwrap()))?
+                content
             }else{
                 return Err(Error::msg("Path does not exist"));
             }
         }else if let Some(modelfile_content) = modelfile{
-            self.parse_modelfile(modelfile_content, None)?
+            modelfile_content.to_string()
         } else{
             return Err(Error::msg("Must provide Either Path or ModelFile"));
         };
@@ -85,55 +93,40 @@ impl OllamaClient {
             
         }
 
-        
-    fn parse_modelfile(&self, modelfile:&str, base: Option<&Path>)->Result<String>{
-        let base_path = base.unwrap_or_else(|| Path::new("."));
-        let mut output = String::new();
-        let reader = Cursor::new(modelfile);
-        for line in reader.lines(){
-            let line = line?;
-            let (command, args) = match line.split_once(' ') {
-                Some((cmd, args))=> (cmd.trim(), args.trim()), 
-                None => {
-                    output.push_str(&line);
-                    output.push('\n');
-                    continue;
-                }
-            };
-
-            match command.to_uppercase().as_str(){
-                "FROM" | "ADAPTER" => {
-                    let path = PathBuf::from(args).canonicalize()?;
-                    let resolved_path = if path.is_absolute(){
-                        path
-                    }else{
-                        base_path.join(path)
-                    };
-
-                    if resolved_path.exists(){
-                        let blob_ref = self.create_blob(&resolved_path)?;
-                        output.push_str(&format!("{} @{}\n", command, blob_ref));
-                    }else{
-                        return Err(Error::msg(format!("Path does not exist: {}", args)));
-                    }   
-                }
-                _=>{
-                    output.push_str(&line);
-                    output.push('\n');
-                }
-            }
-        }
-        Ok(output)
-    }
-
     fn create_blob(&self, path: &Path) -> Result<String>{
         Ok(format!("blob_ref_{}", path.display()))
     }
     }
 
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Tool {
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub function: function
+}
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct function{
+    pub name: String,
+    pub description: String,
+    pub parameters: parameters
+}
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct parameters{
+    #[serde(rename = "type")]
+    pub param_type: String,
+    pub required: Vec<String>,
+    pub properties: std::collections::HashMap<String, Property>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Property {
+    #[serde(rename = "type")]
+    pub prop_type: String,
+    pub description: String,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CreateRequest {
